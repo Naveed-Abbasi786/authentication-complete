@@ -15,3 +15,6 @@ app.use(
 );
 
 app.use(express.json({ limit: "10kb" }));
+import userRoutes from "./routes/user.route.js";
+
+app.use("/api/users", userRoutes);

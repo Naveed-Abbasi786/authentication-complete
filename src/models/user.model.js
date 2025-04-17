@@ -5,48 +5,58 @@ const userSchema = new Schema(
   {
     fullName: {
       type: String,
-      requied: [true, "fullName is required"],
-      lowercase: true,
+      required: [true, "fullName is required"],
       trim: true,
     },
     email: {
       type: String,
-      requied: [true, "email is required"],
+      required: [true, "email is required"],
       lowercase: true,
       trim: true,
     },
     password: {
       type: String,
-      requied: [true, "password is required"],
-      lowercase: true,
+      required: [true, "Password is required"],
       trim: true,
-    },
-    refreshToken: {
-      type: String,
-    },
+      minlength: [6, "Password must be at least 6 characters long"],
+      maxlength: [10, "Password must be at most 10 characters long"]
+    }
+  ,    
     isVerified:{
       type:Boolean,
       default:false
     },
     verificationCode: {
       type: Number,
-      required: true
+  },
+  verificationCodeExpires: {
+    type: Date,
+  },
+  refreshToken:{
+    type:String
   }
   
   },
   { timestamps: true }
 );
 
-userSchema.pre("save",async function (next) {
-    if(!this.isModified("password")) return next()
-        this.password=await bcrypt.hash(this.password,10)
-    next()
-})
+userSchema.pre("save", async function (next) {
+  console.log("🧠 pre-save called");
 
+  if (!this.isModified("password")) {
+    return next();
+  }
+  this.password = await bcrypt.hash(this.password, 10);
+  next();
+});
+
+
+
+
+// ✅ Password check method
 userSchema.methods.isPasswordCorrect = async function (password) {
-    return await bcrypt.compare(password, this.password);
-  };
-  
+  return await bcrypt.compare(password, this.password);
+};
 
   // 🔐 Generate Access Token
 // user.model.js
@@ -59,7 +69,7 @@ userSchema.methods.generateAccessToken = function () {
         fullName: this.fullName,
       },
       process.env.ACCESS_TOKEN_SECRET,
-      { expiresIn: '1m' }
+      { expiresIn: '10m' }
     );
   };
   

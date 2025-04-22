@@ -1,4 +1,4 @@
-import { Verification_Email_Template, Welcome_Email_Template } from "../config/emailTemplete.config.js";
+import { Reset_Password_Email_Template, Verification_Email_Template, Welcome_Email_Template } from "../config/emailTemplete.config.js";
 import transporter from "../config/nodemailer.config.js";
 
 
@@ -31,6 +31,23 @@ const wellcomeEmail=async(email,name)=>{
     } catch (error) {
         console.log('Email error',error)
     }
-  }
+}
 
-  export  {wellcomeEmail,sendVerificationCode};
+const sendResetPasswordEmail = async (email, resetLink) => {
+    try {
+      const response = await transporter.sendMail({
+        from: '"Naveed" <naveedabbasi03111309060@gmail.com>',
+        to: email,
+        subject: "Reset your password",
+        text: "Reset your password",
+        html: Reset_Password_Email_Template.replace("{resetLink}", resetLink),
+      });
+      console.log("Reset Password Email sent successfully", response);
+    } catch (error) {
+      console.log("Email error", error);
+    }
+  };
+  
+
+
+  export  {wellcomeEmail,sendVerificationCode,sendResetPasswordEmail};

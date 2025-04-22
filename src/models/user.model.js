@@ -19,7 +19,6 @@ const userSchema = new Schema(
       required: [true, "Password is required"],
       trim: true,
       minlength: [6, "Password must be at least 6 characters long"],
-      maxlength: [10, "Password must be at most 10 characters long"]
     }
   ,    
     isVerified:{
@@ -41,7 +40,6 @@ const userSchema = new Schema(
 );
 
 userSchema.pre("save", async function (next) {
-  console.log("🧠 pre-save called");
 
   if (!this.isModified("password")) {
     return next();
@@ -69,7 +67,7 @@ userSchema.methods.generateAccessToken = function () {
         fullName: this.fullName,
       },
       process.env.ACCESS_TOKEN_SECRET,
-      { expiresIn: '10m' }
+      { expiresIn: '1h' }
     );
   };
   
@@ -83,4 +81,4 @@ userSchema.methods.generateRefreshToken = function () {
 
   
 
-export const User = mongoose.model("user", userSchema)
+export const User = mongoose.model("User", userSchema)

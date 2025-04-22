@@ -2,22 +2,11 @@ import { User } from "../models/user.model.js";
 import { ApiError } from "../utlis/apiError.js";
 import { ApiResponse } from "../utlis/apiResponse.js";
 import asyncHandler from "../utlis/asyncHandler.js";
-import { sendVerificationCode, wellcomeEmail } from "../libs/mailsender.lib.js";
-
-const generateAccessTokenAndRefreshToken = async (userId) => {
-  try {
-    const user = await User.findById(userId);
-    const accessToken = user.generateAccessToken();
-    const refreshToken = user.generateRefreshToken();
-
-    user.refreshToken = refreshToken;
-    await user.save({ validateBeforeSave: false });
-
-    return { accessToken, refreshToken };
-  } catch (error) {
-    throw new ApiError(500, "Something went wrong while generating tokens");
-  }
-};
+import { sendResetPasswordEmail, sendVerificationCode, wellcomeEmail } from "../libs/mailsender.lib.js";
+import { generateAccessTokenAndRefreshToken } from "../utlis/generateAccesRefreshToken.js";
+import GoogleUser from "../models/google.model.js";
+import jwt from 'jsonwebtoken'
+import bcrypt from 'bcrypt'
 
 const registerUser = asyncHandler(async (req, res) => {
   const { fullName, email, password } = req.body;
@@ -39,7 +28,7 @@ const registerUser = asyncHandler(async (req, res) => {
   const verificationCode = Math.floor(
     100000 + Math.random() * 900000
   ).toString();
-  const expiry = new Date(Date.now() + 40 * 1000); // 30 seconds expiry for testing
+  const expiry = new Date(Date.now() + 59 * 1000); // 59 seconds expiry for testing
 
   const user = await User.create({
     fullName,
@@ -49,11 +38,11 @@ const registerUser = asyncHandler(async (req, res) => {
     verificationCodeExpires: expiry,
   });
 
-  const createdUser = await User.findById(user._id).select("-password");
+  const createdUser = await User.findById(user._id).select("-password -verificationCode -verificationCodeExpires");
 
   await sendVerificationCode(user.email, verificationCode);
 
-  return res
+  return res 
     .status(201)
     .json(
       new ApiResponse(
@@ -254,6 +243,109 @@ const logout = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, "User logged out successfully"));
 });
 
+
+export const loginSuccess = asyncHandler(async (req, res) => {
+  const googleUser = req.user;
+
+  let user = await GoogleUser.findOne({ email: googleUser.email });
+
+  if (!user) {
+    user = await GoogleUser.create({
+      googleId: googleUser.googleId,
+      email: googleUser.email,
+      fullName: googleUser.name,
+      avatar: googleUser.picture,
+      isVerified: true,
+      authProvider: 'google',
+    });
+  }
+
+  const { accessToken, refreshToken } = await generateAccessTokenAndRefreshToken(user._id);
+
+  const options = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+  };
+
+  res
+    .status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(
+      new ApiResponse(200, {
+        user,
+        accessToken,
+        refreshToken,
+      }, "Google Auth Successful")
+    );
+});
+
+const forgetPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    throw new ApiError(403, 'Email is required');
+  }
+
+  const user = await User.findOne({ email });
+  if (!user) {
+    throw new ApiError(401, 'User not found');
+  }
+
+  const resetToken = jwt.sign(
+    { id: user._id },
+    process.env.RESET_TOKEN_SECRET,
+    { expiresIn: '15m' }
+  );
+
+  const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+
+  await sendResetPasswordEmail(email, resetUrl);
+
+  res.status(200).json(new ApiResponse(200,resetUrl,"Reset link has been sent to your email")
+  
+);
+});
+
+
+const resetPassword = asyncHandler(async (req, res) => {
+  const { token } = req.query;
+  const { newPassword, confirmPassword } = req.body;
+
+  if (!newPassword || !confirmPassword) {
+    throw new ApiError(400, "Both password fields are required");
+  }
+
+  if (newPassword !== confirmPassword) {
+    throw new ApiError(400, "Passwords do not match");
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.RESET_TOKEN_SECRET);
+  } catch (error) {
+    throw new ApiError(400, "Invalid or expired token");
+  }
+
+  const user = await User.findById(decoded.id).select("-refreshToken");
+  if (!user) {
+    throw new ApiError(401, "User not found");
+  }
+
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+  user.password = hashedPassword;
+  await user.save();
+
+
+
+  res.status(200).json(new ApiResponse(200,user,"Password reset successfully"));
+});
+
+
+
 const refreshToken = asyncHandler(async (req, res) => {
   const incomingRefreshToken =
     req.cookies.refreshToken || req.body.refreshToken;
@@ -263,33 +355,38 @@ const refreshToken = asyncHandler(async (req, res) => {
   }
 
   try {
+    // Verify refresh token
     const decodedToken = jwt.verify(
       incomingRefreshToken,
       process.env.REFRESH_TOKEN_SECRET
     );
 
-    const user = User.findById(decodedToken?._id);
+    // Find user using the decoded refresh token's user ID
+    const user = await User.findById(decodedToken?._id);
 
     if (!user) {
       throw new ApiError(401, "Invalid refresh token");
     }
 
+    // Check if the refresh token stored in the user matches the incoming token
     if (incomingRefreshToken !== user?.refreshToken) {
-      throw new ApiError(401, "Refresh token is Expired");
+      throw new ApiError(401, "Refresh token is expired");
     }
 
-    const options = {
-      httpOnly: true,
-      secure: true,
-    };
-
+    // Generate new access token and refresh token
     const { accessToken, newRefreshToken } =
       await generateAccessTokenAndRefreshToken(user._id);
 
+    const options = {
+      httpOnly: true, // For security reasons, don't allow JS access
+      secure: true,   // Ensure it works only over HTTPS in production
+    };
+
+    // Send new tokens in the response cookies
     return res
       .status(200)
-      .cookie("accesToken", accessToken, options)
-      .cookie("refreshToken", refreshToken, options)
+      .cookie("accessToken", accessToken, options) // Fixed typo here
+      .cookie("refreshToken", newRefreshToken, options) // Make sure you're passing newRefreshToken here
       .json(
         new ApiResponse(
           200,
@@ -297,14 +394,16 @@ const refreshToken = asyncHandler(async (req, res) => {
             accessToken,
             refreshToken: newRefreshToken,
           },
-          "Acces token refresh"
+          "Access token refreshed successfully"
         )
       );
   } catch (error) {
-    throw new ApiError(401, error?.message);
+    console.log(error);
+    throw new ApiError(401, error?.message || "Error refreshing token");
   }
 });
 
 
 
-export { registerUser, verifyUser, resendOtp, login ,logout,refreshToken};
+
+export { registerUser, verifyUser, resendOtp, login ,logout,refreshToken,forgetPassword,resetPassword};

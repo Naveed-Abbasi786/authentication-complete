@@ -147,12 +147,25 @@ const allBlogs = asyncHandler(async (req, res) => {
 
   const skip = (page - 1) * limit;
 
-  const totalBlogs = await Blog.countDocuments();
+  // 👇 Count only non-deleted and public blogs
+  const totalBlogs = await Blog.countDocuments({
+    isPublic: true,
+    isDeleted: false,
+  });
 
-  const blogs = await Blog.find()
+  const blogs = await Blog.find({
+    isPublic: true,
+    isDeleted: false,
+  })
     .populate("author", "name email")
     .populate("category", "name")
-    .sort({ createdAt: -1 }) 
+    .populate({
+      path: "comments",
+      populate: {
+        path: "author",
+        select: "fullName email", 
+      },})
+    .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit);
 
@@ -168,7 +181,6 @@ const allBlogs = asyncHandler(async (req, res) => {
   );
 });
 
-
 const userBlogs = asyncHandler(async (req, res) => {
   const user = req.user;
 
@@ -176,7 +188,7 @@ const userBlogs = asyncHandler(async (req, res) => {
     throw new ApiError(404, "User not found");
   }
 
-  const userBlogs = await Blog.find({ author: user._id }).populate("author", "fullName email").populate("category","name");
+  const userBlogs = await Blog.find({ author: user._id ,isDeleted:false}).populate("author", "fullName email").populate("category","name");
 
   return res.status(200).json(
     new ApiResponse(200, userBlogs, "User blogs fetched successfully")
@@ -184,6 +196,139 @@ const userBlogs = asyncHandler(async (req, res) => {
 });
 
 
+const blogDetails = asyncHandler(async (req, res) => {
+  const { slug } = req.params; 
+  if (!slug) {
+    throw new ApiError(400, "Slug is required");
+  }
 
-export { addBlog ,updateBlog,deletBloge,allBlogs,userBlogs};
+  const blogDetail = await Blog.findOne({ slug })
+    .populate("author", "fullName email")
+    .populate("category", "name");
+
+  if (!blogDetails) {
+    throw new ApiError(404, "Blog not found");
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, blogDetail, "Blog successfully fetched"));
+});
+
+
+const likeDislikeToggle = asyncHandler(async (req, res) => {
+  const { blogId } = req.body;
+  const userId = req.user._id;
+
+  const blog = await Blog.findById(blogId);
+
+  if (!blog) {
+    throw new ApiError(404, "Blog not found");
+  }
+
+  // Check if the user has liked or disliked the blog
+  const hasLiked = blog.likes.includes(userId);
+  const hasDisliked = blog.dislikes.includes(userId);
+
+  let message = "";
+
+  if (hasLiked) {
+    // Remove like if the user had already liked it
+    blog.likes.pull(userId);
+    message = "Like removed successfully";
+    
+    // If no other user has liked, set isLiked to false
+    if (blog.likes.length === 0) {
+      blog.isLiked = false;
+    }
+  } else {
+    // Add like if the user hasn't liked it yet
+    blog.likes.push(userId);
+    message = "Blog liked successfully";
+    
+    // If the user had previously disliked, remove dislike
+    if (hasDisliked) {
+      blog.dislikes.pull(userId);
+    }
+
+    // Set isLiked to true after adding like
+    blog.isLiked = true;
+  }
+
+  // Save the blog after modification
+  await blog.save();
+
+  return res.status(200).json(new ApiResponse(200, blog, message));
+});
+
+
+const publicPrivateToggle = asyncHandler(async (req, res) => {
+  const { blogId } = req.body;
+
+  if (!blogId) {
+    throw new ApiError(404, "blogId is required");
+  }
+
+  const userId = req.user._id;
+
+  const blog = await Blog.findById(blogId);
+
+  if (!blog) {
+    throw new ApiError(404, "Blog not found");
+  }
+
+  if (blog.author.toString() !== userId.toString()) {
+    throw new ApiError(402, "Unauthorized request. You are not allowed to perform this action.");
+  }
+
+  let message = "";
+  if (blog.isPublic) {
+    blog.isPublic = false;
+    message = "Blog is now private successfully";
+  } else {
+    blog.isPublic = true;
+    message = "Blog is now public successfully";
+  }
+
+  await blog.save();
+
+  return res.status(200).json(new ApiResponse(200, blog, message));
+});
+
+const softDelete = asyncHandler(async (req, res) => {
+  const { blogId } = req.body;
+
+  if (!blogId) {
+    throw new ApiError(404, "blogId is required");
+  }
+
+  const userId = req.user._id;
+
+  if (!userId) {
+    throw new ApiError(404, "User not found");
+  }
+
+  const blog = await Blog.findById(blogId);
+
+  if (!blog) {
+    throw new ApiError(404, "Blog not found");
+  }
+
+  blog.isDeleted = true;
+  await blog.save(); // await important hai!
+
+  return res.status(200).json(
+    new ApiResponse(200, blog, "Blog has been deleted successfully")
+  );
+});
+
+
+const comments=asyncHandler(async(req,res)=>{
+  
+})
+
+
+
+
+export { addBlog ,updateBlog,deletBloge,allBlogs,userBlogs,blogDetails,likeDislikeToggle,publicPrivateToggle,softDelete};
 

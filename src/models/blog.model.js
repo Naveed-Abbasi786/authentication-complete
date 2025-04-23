@@ -27,6 +27,33 @@ const blogSchema = new Schema(
       ref: "User",
       required: true,
     },
+    likes: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User", // Reference to the User model
+    }],
+    isLiked:{
+      type:Boolean,
+      default:false
+
+    },
+    dislikes: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User", 
+    }],
+    comments: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Comment",
+      }
+    ],    
+    isPublic:{
+      type:Boolean,
+      default:true
+    },
+    isDeleted:{
+      type:Boolean,
+      default:false,
+    },
     thumbnail: {
       type: String,
     },

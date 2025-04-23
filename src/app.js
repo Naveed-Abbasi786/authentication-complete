@@ -36,9 +36,11 @@ app.use(passport.session());
 import userRoutes from "./routes/user.route.js";
 import categoryRoutes from './routes/category.route.js'
 import blogRoutes from './routes/blog.route.js'
+import commentBlogRoute from './routes/commentBlog.route.js'
 app.use("/api/auth", userRoutes);
 app.use("/api/blog/category",categoryRoutes)
 app.use("/api/blog/",blogRoutes)
+app.use("/api/blog/comment",commentBlogRoute)
 
 
 

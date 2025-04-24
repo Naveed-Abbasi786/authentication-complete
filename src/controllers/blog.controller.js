@@ -3,8 +3,8 @@ import { Blog } from "../models/blog.model.js";
 import { ApiError } from "../utlis/apiError.js";
 import asyncHandler from "../utlis/asyncHandler.js";
 import { uploadOnCloudinary } from "../utlis/fileUpload.js";
-import { ApiResponse } from '../utlis/apiResponse.js';
-import sanitizeHtml from "sanitize-html"; 
+import { ApiResponse } from "../utlis/apiResponse.js";
+import sanitizeHtml from "sanitize-html";
 
 const addBlog = asyncHandler(async (req, res) => {
   const { title, content, categoryId } = req.body;
@@ -23,27 +23,29 @@ const addBlog = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Thumbnail is required");
   }
 
-  const thumbnailUploadCloudninary = await uploadOnCloudinary(thumbnailLocalPath);
+  const thumbnailUploadCloudninary = await uploadOnCloudinary(
+    thumbnailLocalPath
+  );
 
   if (!thumbnailUploadCloudninary) {
     throw new ApiError(501, "Thumbnail uploading error");
   }
 
   const sanitizedContent = sanitizeHtml(content, {
-    allowedTags: ['b', 'i', 'em', 'strong', 'a', 'p', 'ul', 'li', 'br', 'img'],
+    allowedTags: ["b", "i", "em", "strong", "a", "p", "ul", "li", "br", "img"],
     allowedAttributes: {
-      'a': ['href', 'name', 'target'],
-      'img': ['src']
-    }
+      a: ["href", "name", "target"],
+      img: ["src"],
+    },
   });
 
   const newBlog = await Blog.create({
     title,
-    content: sanitizedContent, 
+    content: sanitizedContent,
     slug,
     category: categoryId,
     author: user._id,
-    thumbnail: thumbnailUploadCloudninary.url
+    thumbnail: thumbnailUploadCloudninary.url,
   });
 
   return res
@@ -82,7 +84,18 @@ const updateBlog = asyncHandler(async (req, res) => {
 
   if (content) {
     const sanitizedContent = sanitizeHtml(content, {
-      allowedTags: ["b", "i", "em", "strong", "a", "p", "ul", "li", "br", "img"],
+      allowedTags: [
+        "b",
+        "i",
+        "em",
+        "strong",
+        "a",
+        "p",
+        "ul",
+        "li",
+        "br",
+        "img",
+      ],
       allowedAttributes: {
         a: ["href", "name", "target"],
         img: ["src"],
@@ -98,7 +111,6 @@ const updateBlog = asyncHandler(async (req, res) => {
     }
     updateData.thumbnail = thumbnailUploadCloudinary.url;
   }
-  
 
   const updatedBlog = await Blog.findByIdAndUpdate(blogId, updateData, {
     new: true,
@@ -108,7 +120,6 @@ const updateBlog = asyncHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(200, updatedBlog, "Blog updated successfully"));
 });
-
 
 const deletBloge = asyncHandler(async (req, res) => {
   const { blogId } = req.body;
@@ -123,7 +134,7 @@ const deletBloge = asyncHandler(async (req, res) => {
     throw new ApiError(401, "User not found");
   }
 
-  const blog = await Blog.findById(blogId); 
+  const blog = await Blog.findById(blogId);
 
   if (!blog) {
     throw new ApiError(404, "Blog not found");
@@ -137,9 +148,8 @@ const deletBloge = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new ApiResponse(200, "Successfully deleted blog",));
+    .json(new ApiResponse(200, "Successfully deleted blog"));
 });
-
 
 const allBlogs = asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
@@ -157,27 +167,48 @@ const allBlogs = asyncHandler(async (req, res) => {
     isPublic: true,
     isDeleted: false,
   })
-    .populate("author", "name email")
-    .populate("category", "name")
     .populate({
       path: "comments",
-      populate: {
-        path: "author",
-        select: "fullName email", 
-      },})
+      populate: [
+        {
+          path: "author",
+          select: "fullName email",
+        },
+        {
+          path: "replies",
+          populate: {
+            path: "author",
+            select: "fullName email",
+          },
+          populate: {
+            path: "replies",
+            select: "content",
+            populate: {
+              path: "author",
+              select: "fullName email",
+            },
+          },
+        },
+      ],
+    })
+
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit);
 
   res.status(200).json(
-    new ApiResponse(200, {
-      blogs,
-      pagination: {
-        totalBlogs,
-        currentPage: page,
-        totalPages: Math.ceil(totalBlogs / limit),
+    new ApiResponse(
+      200,
+      {
+        blogs,
+        pagination: {
+          totalBlogs,
+          currentPage: page,
+          totalPages: Math.ceil(totalBlogs / limit),
+        },
       },
-    }, "Paginated blogs fetched successfully")
+      "Paginated blogs fetched successfully"
+    )
   );
 });
 
@@ -188,16 +219,17 @@ const userBlogs = asyncHandler(async (req, res) => {
     throw new ApiError(404, "User not found");
   }
 
-  const userBlogs = await Blog.find({ author: user._id ,isDeleted:false}).populate("author", "fullName email").populate("category","name");
+  const userBlogs = await Blog.find({ author: user._id, isDeleted: false })
+    .populate("author", "fullName email")
+    .populate("category", "name");
 
-  return res.status(200).json(
-    new ApiResponse(200, userBlogs, "User blogs fetched successfully")
-  );
+  return res
+    .status(200)
+    .json(new ApiResponse(200, userBlogs, "User blogs fetched successfully"));
 });
 
-
 const blogDetails = asyncHandler(async (req, res) => {
-  const { slug } = req.params; 
+  const { slug } = req.params;
   if (!slug) {
     throw new ApiError(400, "Slug is required");
   }
@@ -214,7 +246,6 @@ const blogDetails = asyncHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(200, blogDetail, "Blog successfully fetched"));
 });
-
 
 const likeDislikeToggle = asyncHandler(async (req, res) => {
   const { blogId } = req.body;
@@ -236,7 +267,7 @@ const likeDislikeToggle = asyncHandler(async (req, res) => {
     // Remove like if the user had already liked it
     blog.likes.pull(userId);
     message = "Like removed successfully";
-    
+
     // If no other user has liked, set isLiked to false
     if (blog.likes.length === 0) {
       blog.isLiked = false;
@@ -245,7 +276,7 @@ const likeDislikeToggle = asyncHandler(async (req, res) => {
     // Add like if the user hasn't liked it yet
     blog.likes.push(userId);
     message = "Blog liked successfully";
-    
+
     // If the user had previously disliked, remove dislike
     if (hasDisliked) {
       blog.dislikes.pull(userId);
@@ -260,7 +291,6 @@ const likeDislikeToggle = asyncHandler(async (req, res) => {
 
   return res.status(200).json(new ApiResponse(200, blog, message));
 });
-
 
 const publicPrivateToggle = asyncHandler(async (req, res) => {
   const { blogId } = req.body;
@@ -278,7 +308,10 @@ const publicPrivateToggle = asyncHandler(async (req, res) => {
   }
 
   if (blog.author.toString() !== userId.toString()) {
-    throw new ApiError(402, "Unauthorized request. You are not allowed to perform this action.");
+    throw new ApiError(
+      402,
+      "Unauthorized request. You are not allowed to perform this action."
+    );
   }
 
   let message = "";
@@ -317,18 +350,69 @@ const softDelete = asyncHandler(async (req, res) => {
   blog.isDeleted = true;
   await blog.save(); // await important hai!
 
-  return res.status(200).json(
-    new ApiResponse(200, blog, "Blog has been deleted successfully")
-  );
+  return res
+    .status(200)
+    .json(new ApiResponse(200, blog, "Blog has been deleted successfully"));
 });
 
+const searchBlogs = asyncHandler(async (req, res) => {
+  const { keyword } = req.query;
 
-const comments=asyncHandler(async(req,res)=>{
-  
-})
+  if (!keyword) {
+    throw new ApiError(400, "Keyword is required for search");
+  }
 
+  const blogs = await Blog.find({
+    $or: [
+      {
+        title: { $regex: keyword.trim().replace(/\s+/g, ".*"), $options: "i" },
+      },
+      { content: { $regex: keyword.replace(/\s+/g, ".*"), $options: "i" } },
+      { slug: { $regex: keyword.replace(/\s+/g, ".*"), $options: "i" } },
+    ],
+    isPublic: true,
+    isDeleted: false,
+  }).populate({
+    path: "comments",
+    populate: [
+      {
+        path: "author",
+        select: "fullName email",
+      },
+      {
+        path: "replies",
+        populate: {
+          path: "author",
+          select: "fullName email",
+        },
+        populate: {
+          path: "replies",
+          select: "content",
+          populate: {
+            path: "author",
+            select: "fullName email",
+          },
+        },
+      },
+    ],
+  });
 
+  res
+    .status(200)
+    .json(
+      new ApiResponse(200, { blogs }, "Search results fetched successfully")
+    );
+});
 
-
-export { addBlog ,updateBlog,deletBloge,allBlogs,userBlogs,blogDetails,likeDislikeToggle,publicPrivateToggle,softDelete};
-
+export {
+  addBlog,
+  updateBlog,
+  deletBloge,
+  allBlogs,
+  userBlogs,
+  blogDetails,
+  likeDislikeToggle,
+  publicPrivateToggle,
+  softDelete,
+  searchBlogs,
+};

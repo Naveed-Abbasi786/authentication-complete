@@ -1,3 +1,4 @@
+import { threadId } from "worker_threads";
 import { Blog } from "../models/blog.model.js";
 import Comment from "../models/commentBlog.model.js";
 import { ApiError } from "../utlis/apiError.js";
@@ -108,5 +109,41 @@ const replyComments=asyncHandler(async(req,res)=>{
 })
 
 
-export { addComment,updateComment,replyComments };
+const nestedReply = asyncHandler(async (req, res) => {
+  const { replyId, replyComment } = req.body;
+
+  if (!replyId || !replyComment) {
+    throw new ApiError(403, "replyId and replyComment are required");
+  }
+
+  const user = req.user;
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  // Check if parent comment exists
+  const parentComment = await Comment.findById(replyId);
+  if (!parentComment) {
+    throw new ApiError(404, "Parent comment not found");
+  }
+
+  // Create the nested reply
+  const newReply = await Comment.create({
+    blog: parentComment.blog,        // same blog as parent
+    author: user._id,                // current logged-in user
+    content: replyComment,          
+    parentComment: replyId,         // mark parent comment
+  });
+
+  // Push the reply to parent's replies array
+  parentComment.replies.push(newReply._id);
+  await parentComment.save();
+
+  res.status(201).json(
+    new ApiResponse(201, newReply, "Reply added successfully")
+  );
+});
+
+
+export { addComment,updateComment,replyComments ,nestedReply};
 

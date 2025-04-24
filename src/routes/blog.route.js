@@ -9,7 +9,8 @@ import {
   blogDetails,
   likeDislikeToggle,
   publicPrivateToggle,
-  softDelete
+  softDelete,
+  searchBlogs
 } from "../controllers/blog.controller.js";
 import { upload } from "../middlewears/multer.middlewares.js";
 const router = Router();
@@ -24,5 +25,6 @@ router.get("/details/:slug", blogDetails);
 router.post("/like-dislike",verifyJwt,likeDislikeToggle)
 router.post("/public-private",verifyJwt,publicPrivateToggle)
 router.delete("/soft-delete",verifyJwt,softDelete)
+router.post("/search",searchBlogs)
 
 export default router;

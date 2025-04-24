@@ -11,7 +11,6 @@ import transporter from "../config/nodemailer.config.js";
           text: "Verify your Email", // plain text body
           html: Verification_Email_Template.replace("{verificationCode}",verificationCode)
       })
-      console.log('Email send Successfully',response)
   } catch (error) {
       console.log('Email error',error)
   }
@@ -27,7 +26,6 @@ const wellcomeEmail=async(email,name)=>{
             text: "Welcome to Our Community!", // plain text body
             html: Welcome_Email_Template.replace("{name}",name)
         })
-        console.log('Email send Successfully',response)
     } catch (error) {
         console.log('Email error',error)
     }
